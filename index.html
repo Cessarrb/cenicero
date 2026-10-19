@@ -70,6 +70,42 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
 .bar.is-today i{background:var(--ember)}
 .bar em{font-style:normal;font-size:12px;color:var(--ash);font-variant-numeric:tabular-nums}
 .bar b{font-size:12px;font-variant-numeric:tabular-nums}
+.cal{display:flex;flex-direction:column;gap:10px}
+.cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cal-head b{font:700 24px/1 var(--display);text-transform:capitalize}
+.nav{all:unset;cursor:pointer;width:38px;height:38px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line);font-size:22px;line-height:1}
+.nav[disabled]{opacity:.3;cursor:default}
+.nav:focus-visible{outline:3px solid var(--cork);outline-offset:2px}
+.cal-dow,.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow span{text-align:center;font-size:12px;font-weight:600;color:var(--ash)}
+.cal-grid button{all:unset;box-sizing:border-box;cursor:pointer;aspect-ratio:1;max-width:100%;border-radius:9px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border:1px solid transparent;
+  background:color-mix(in srgb,var(--cork) calc(var(--h,0) * 70%),var(--paper))}
+.cal-grid button .dn{font-size:12px;color:var(--ash);font-variant-numeric:tabular-nums}
+.cal-grid button .dc{font:700 17px/1 var(--display);font-variant-numeric:tabular-nums}
+.cal-grid button.hot .dn{color:var(--ink)}
+.cal-grid button.today{border-color:var(--ember)}
+.cal-grid button[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.cal-grid button[disabled]{cursor:default;opacity:.35}
+.cal-grid button:focus-visible{outline:3px solid var(--cork);outline-offset:1px}
+.cal-grid .blank{aspect-ratio:1}
+.dayd{display:flex;flex-direction:column;gap:10px}
+.dd-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.dd-head>div:first-child{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dd-head b{font:700 24px/1.05 var(--display)}
+.dd-count{display:flex;flex-direction:column;align-items:flex-end}
+.dd-count strong{font:800 48px/0.9 var(--display);font-variant-numeric:tabular-nums}
+.dd-count small{color:var(--ash);font-size:12px}
+.dayd .note{margin:0}
+.ddlist{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.ddlist li{display:grid;grid-template-columns:2.4em 4.2em 1fr auto;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line)}
+.ddlist .n{color:var(--ash);font-size:13px;font-variant-numeric:tabular-nums}
+.ddlist .t{font:700 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.ddlist .g{color:var(--ash);font-size:13px;min-width:0}
+.ddlist .del{all:unset;cursor:pointer;padding:5px 9px;border-radius:8px;border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--ash)}
+.ddlist .del.arm{border-color:var(--ember);color:var(--ember)}
+.ddlist .del:focus-visible{outline:3px solid var(--cork);outline-offset:2px}
+.ddlist .empty-li{display:block;color:var(--ash);font-size:14px;padding:14px 2px}
 .hrs{display:flex;flex-direction:column;gap:12px}
 .hrs-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .seg{display:flex;gap:2px;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:2px}
@@ -164,6 +200,31 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
   </section>
 
   <section id="reg" hidden>
+    <div class="week cal">
+      <div class="cal-head">
+        <button class="nav" id="calPrev" aria-label="Mes anterior">‹</button>
+        <b id="calTitle"></b>
+        <button class="nav" id="calNext" aria-label="Mes siguiente">›</button>
+      </div>
+      <div class="cal-dow"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="cal-grid" id="calGrid"></div>
+      <p class="note" id="calSum"></p>
+    </div>
+    <div style="height:14px"></div>
+    <div class="week dayd" id="dayDetail">
+      <div class="dd-head">
+        <div><span class="label">Día seleccionado</span><b id="ddTitle"></b></div>
+        <div class="dd-count"><strong id="ddCount">0</strong><small>cigarros</small></div>
+      </div>
+      <p class="note" id="ddMeta"></p>
+      <ol class="ddlist" id="ddList"></ol>
+      <div class="addbox">
+        <label for="ddTime" class="note" style="flex-basis:100%">¿Te olvidaste de anotar uno? Poné la hora:</label>
+        <input type="time" id="ddTime" style="flex:0 1 9em">
+        <button class="btn" id="ddAdd">Agregar a este día</button>
+      </div>
+    </div>
+    <div style="height:14px"></div>
     <div class="week">
       <span class="label">Últimos 7 días</span>
       <div class="bars" id="bars"></div>
@@ -351,6 +412,74 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
     period=b.dataset.p; try{localStorage.setItem(LS+'-period',period)}catch(e){} render();
   }));
 
+  // Calendario
+  let calM=(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1)})();
+  let selDay=keyOf(new Date());
+  const fmtMY=new Intl.DateTimeFormat('es-AR',{month:'long',year:'numeric'});
+  function renderCal(now){
+    const tk=keyOf(now), y=calM.getFullYear(), m=calM.getMonth();
+    $('calTitle').textContent=fmtMY.format(calM).replace(' de ',' ');
+    $('calNext').disabled=y>now.getFullYear()||(y===now.getFullYear()&&m>=now.getMonth());
+    const nDays=new Date(y,m+1,0).getDate(), lead=(new Date(y,m,1).getDay()+6)%7;
+    let mx=1,tot=0,act=0;
+    for(let i=1;i<=nDays;i++){const c=cnt(keyOf(new Date(y,m,i)));mx=Math.max(mx,c);tot+=c;if(c)act++}
+    const g=$('calGrid'); g.innerHTML='';
+    for(let i=0;i<lead;i++){const b=document.createElement('span');b.className='blank';g.appendChild(b)}
+    for(let i=1;i<=nDays;i++){
+      const d=new Date(y,m,i),k=keyOf(d),c=cnt(k);
+      const b=document.createElement('button');b.dataset.k=k;
+      b.style.setProperty('--h',c?(0.25+0.75*c/mx).toFixed(2):0);
+      if(c/mx>0.5) b.classList.add('hot');
+      if(k===tk) b.classList.add('today');
+      b.setAttribute('aria-pressed',k===selDay);
+      if(k>tk) b.disabled=true;
+      b.setAttribute('aria-label',`${fmtLong.format(d)}: ${c} cigarros`);
+      b.innerHTML=`<span class="dn">${i}</span><span class="dc">${c||''}</span>`;
+      g.appendChild(b);
+    }
+    $('calSum').textContent=tot?`${tot} cigarros en ${act} día${act===1?'':'s'} · tocá un día para ver los horarios`:'Sin registros este mes.';
+    renderDay(tk);
+  }
+  function renderDay(tk){
+    const k=selDay, d=state[k], c=cnt(k);
+    const lt=fmtLong.format(fromKey(k));
+    $('ddTitle').textContent=k===tk?'Hoy, '+lt:lt.charAt(0).toUpperCase()+lt.slice(1);
+    $('ddCount').textContent=c;
+    const t=(d&&d.times||[]).map((ms,i)=>({ms,i})).sort((a,b)=>a.ms-b.ms);
+    if(c){
+      const first=t[0].ms,last=t[t.length-1].ms;
+      const gaps=t.slice(1).map((x,j)=>(x.ms-t[j].ms)/60000);
+      $('ddMeta').textContent=`Primero ${fmtTime.format(new Date(first))} · último ${fmtTime.format(new Date(last))}`+(gaps.length?` · uno cada ${dur(gaps.reduce((a,b)=>a+b,0)/gaps.length)} en promedio`:'')+(bx(k)?` · compraste ${bx(k)} caja${bx(k)>1?'s':''}`:'');
+    } else $('ddMeta').textContent=bx(k)?`Sin cigarros anotados · compraste ${bx(k)} caja${bx(k)>1?'s':''}`:'';
+    const ol=$('ddList'); ol.innerHTML='';
+    if(!c){const li=document.createElement('li');li.className='empty-li';li.textContent='No hay cigarros anotados este día.';ol.appendChild(li)}
+    t.forEach((x,j)=>{
+      const li=document.createElement('li');
+      const n=document.createElement('span');n.className='n';n.textContent='#'+(j+1);
+      const tt=document.createElement('span');tt.className='t';tt.textContent=fmtTime.format(new Date(x.ms));
+      const g=document.createElement('span');g.className='g';g.textContent=j?`${dur((x.ms-t[j-1].ms)/60000)} después`:'el primero';
+      const del=document.createElement('button');del.className='del';del.textContent='Borrar';del.dataset.i=x.i;
+      del.setAttribute('aria-label','Borrar el cigarro de las '+tt.textContent);
+      li.append(n,tt,g,del);ol.appendChild(li);
+    });
+  }
+  $('calGrid').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;selDay=b.dataset.k;render();
+    if(window.matchMedia('(max-width:700px)').matches) $('dayDetail').scrollIntoView({behavior:'smooth',block:'start'})});
+  $('calPrev').addEventListener('click',()=>{calM=new Date(calM.getFullYear(),calM.getMonth()-1,1);render()});
+  $('calNext').addEventListener('click',()=>{calM=new Date(calM.getFullYear(),calM.getMonth()+1,1);render()});
+  $('ddList').addEventListener('click',e=>{
+    const x=e.target.closest('.del');if(!x)return;
+    if(!x.classList.contains('arm')){x.classList.add('arm');x.textContent='¿Seguro?';setTimeout(()=>{x.classList.remove('arm');x.textContent='Borrar'},3000);return}
+    const d=state[selDay];if(!d)return;d.times.splice(+x.dataset.i,1);persist(selDay);render();toast('Cigarro borrado');
+  });
+  $('ddAdd').addEventListener('click',()=>{
+    const v=$('ddTime').value; if(!v){toast('Elegí la hora primero');return}
+    const [h,mi]=v.split(':').map(Number); const dt=fromKey(selDay); dt.setHours(h,mi,0,0);
+    if(dt.getTime()>Date.now()){toast('Esa hora todavía no pasó');return}
+    const d=day(selDay); d.times.push(dt.getTime()); d.times.sort((a,b)=>a-b);
+    persist(selDay); $('ddTime').value=''; render(); toast('Agregado a las '+v);
+  });
+
   function render(){
     const now=new Date(), tk=keyOf(now);
     $('hdrDate').textContent=fmtLong.format(now);
@@ -374,8 +503,9 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
     const vals=[];for(let i=6;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);vals.push([d,cnt(keyOf(d))])}
     const max=Math.max(1,...vals.map(v=>v[1]));
     vals.forEach(([d,v],i)=>{const el=document.createElement('div');el.className='bar'+(i===6?' is-today':'');
-      el.innerHTML=`<b>${v}</b><i style="height:${Math.max(2,v/max*90)}%"></i><em>${fmtDay.format(d).split(' ')[0].replace('.','')}</em>`;bars.appendChild(el)});
+      el.innerHTML=`<b>${v}</b><i style="height:${Math.max(2,v/max*90)}%"></i><em>${fmtDay.format(d).split(' ')[0].replace(/[.,]/g,'')}</em>`;bars.appendChild(el)});
     renderHours(now);
+    renderCal(now);
     // Lista agrupada por mes (todo el historial)
     const keys=Object.keys(state).filter(k=>cnt(k)||bx(k)).sort().reverse();
     const wrap=$('months');
