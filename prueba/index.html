@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#e2531f">
 <meta name="robots" content="noindex">
+<link rel="manifest" href="/cenicero/manifest.webmanifest">
+<link rel="icon" href="/cenicero/icon-192.png">
+<link rel="apple-touch-icon" href="/cenicero/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -876,6 +880,11 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
   });
   window.addEventListener('online',()=>{ if(!ACC_ON) return; if(!fb) fbLoad(); else if(fb.user&&!fb.ready) fbStart() });
   if(ACC_ON) fbLoad();
+
+  // App instalable: guarda una copia para abrir sin señal (solo en GitHub Pages)
+  if(/(^|\.)github\.io$/.test(location.hostname) && location.pathname.startsWith('/cenicero/') && 'serviceWorker' in navigator){
+    navigator.serviceWorker.register('/cenicero/sw.js',{scope:'/cenicero/'}).catch(e=>console.warn('sw',e));
+  }
 
   render();
   maybeQuote();
