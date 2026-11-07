@@ -167,6 +167,14 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
 .buys .del{all:unset;cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--ash)}
 .buys .del.arm{border-color:var(--ember);color:var(--ember)}
 .buys .del:focus-visible{outline:3px solid var(--cork);outline-offset:2px}
+.acct{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.acct-top{display:flex;gap:10px;align-items:flex-start}
+.acct-t{font-size:14px;line-height:1.4;min-width:0}
+.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:5px;background:var(--ash)}
+.dot.ok{background:#2e9e5b}.dot.wait{background:var(--cork)}.dot.err{background:var(--ember)}
+.acct-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.acct-row .btn{flex:1 1 auto}
+.acct-mail{color:var(--ash);font-size:13px;min-width:0;overflow-wrap:anywhere;flex:1 1 auto}
 .hdr-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .qlink{all:unset;cursor:pointer;font-size:13px;font-weight:600;color:var(--cork);text-decoration:underline;text-underline-offset:3px}
 .qlink:focus-visible{outline:3px solid var(--cork);outline-offset:2px;border-radius:4px}
@@ -219,6 +227,14 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
       <div><span class="label">Semana</span><strong id="sWeek">0</strong><small>desde el lunes</small></div>
       <div><span class="label">Mes</span><strong id="sMonth">0</strong><small id="sMonthName"></small></div>
       <div><span class="label">Promedio</span><strong id="sAvg">0</strong><small>por día, este mes</small></div>
+    </div>
+    <div class="acct" id="acct" hidden>
+      <div class="acct-top"><span class="dot" id="accDot"></span><span class="acct-t" id="accText"></span></div>
+      <div class="acct-row">
+        <button class="btn primary" id="accIn">Entrar con Google</button>
+        <span class="acct-mail" id="accMail"></span>
+        <button class="qlink" id="accOut" hidden>Salir</button>
+      </div>
     </div>
   </section>
 
@@ -367,6 +383,7 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
 
   function persist(k){
     saveLocal();
+    fbWriteDay(k);
     if(!col) return;
     pending[k]=(pending[k]||0)+1;
     clearTimeout(timers[k]);
@@ -375,8 +392,9 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
       chains[k]=(chains[k]||Promise.resolve()).then(()=>{
         const d=state[k]||{times:[],boxes:0,buys:[]};
         return col.doc(k).set({times:d.times.slice(),boxes:d.boxes||0,buys:(d.buys||[]).slice()});
-      }).catch(e=>{toast('No se pudo guardar en la nube. Quedó guardado en este teléfono.')})
-        .finally(()=>{pending[k]=Math.max(0,(pending[k]||0)-n)});
+      }).then(()=>{pending[k]=Math.max(0,(pending[k]||0)-n)},
+        // si falla, el día queda protegido: la nube no pisa lo que se sumó acá
+        ()=>{toast('No se pudo guardar en la nube. Quedó guardado en este teléfono.')});
     },400);
   }
 
@@ -634,6 +652,7 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
     if(price){lastPrice=String(price)}
     persist(k);
     if(col) col.doc('settings').set({perPack,lastPrice}).catch(()=>{});
+    fbWriteSettings();
     $('boxPrice').blur(); render();
     toast(price?`Caja sumada · ${money(price)}`:'Caja sumada sin precio');
   });
@@ -652,7 +671,7 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
     if(i>=0) d.buys.splice(i,1); else if(d.boxes) d.boxes--;
     persist(k);render();toast('Compra borrada');
   });
-  $('perPack').addEventListener('change',e=>{const v=parseInt(e.target.value,10);if(v>0&&v<=50){perPack=v;saveLocal();if(col)col.doc('settings').set({perPack:v,lastPrice}).catch(()=>{});render()}});
+  $('perPack').addEventListener('change',e=>{const v=parseInt(e.target.value,10);if(v>0&&v<=50){perPack=v;saveLocal();if(col)col.doc('settings').set({perPack:v,lastPrice}).catch(()=>{});fbWriteSettings();render()}});
   // ojo: 'settings' es un id de documento en la misma colección, se filtra abajo
 
   document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
@@ -720,6 +739,142 @@ h1{font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;
   $('qOk').addEventListener('click',hideQuote);
   $('qWrap').addEventListener('click',e=>{if(e.target===$('qWrap'))hideQuote()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('qWrap').hidden)hideQuote()});
+
+  // ===== Cuenta con Google (Firebase) — solo en cessarrb.github.io =====
+  // Firestore guarda primero en el celular (IndexedDB) y sube cuando hay señal.
+  const FB_CFG={
+    apiKey:"AIzaSyAySmcQ6DKPBSrB546MtHmhJ9ah7B2wQPM",
+    authDomain:"cenicero.firebaseapp.com",
+    projectId:"cenicero",
+    storageBucket:"cenicero.firebasestorage.app",
+    messagingSenderId:"156056971335",
+    appId:"1:156056971335:web:bf152906920ad91d20a962"
+  };
+  const FB_V='10.12.2';
+  const ACC_ON=/(^|\.)github\.io$|^localhost$|^127\.0\.0\.1$/.test(location.hostname);
+  var fb=null; // {A,F,auth,db,user,ready,unsub[]}
+  let fbLoading=false;
+  const asDay=x=>({times:Array.isArray(x&&x.times)?x.times.slice().sort((a,b)=>a-b):[],boxes:(x&&x.boxes)||0,buys:Array.isArray(x&&x.buys)?x.buys.slice():[]});
+  const emptyDay=d=>!d.times.length&&!d.boxes&&!d.buys.length;
+  function fbWriteDay(k){
+    if(!fb||!fb.ready) return;
+    const F=fb.F, ref=F.doc(fb.db,'users',fb.user.uid,'days',k), d=asDay(state[k]);
+    (emptyDay(d)?F.deleteDoc(ref):F.setDoc(ref,d)).catch(e=>console.warn('cenicero sync',e));
+  }
+  function fbWriteSettings(){
+    if(!fb||!fb.ready) return;
+    fb.F.setDoc(fb.F.doc(fb.db,'users',fb.user.uid,'meta','settings'),{perPack,lastPrice}).catch(()=>{});
+  }
+  // une dos versiones de un día sin perder nada (para el primer inicio de sesión)
+  function mergeDay(a,b){
+    a=asDay(a); b=asDay(b);
+    const times=[...new Set([...a.times,...b.times])].sort((x,y)=>x-y);
+    const count=arr=>{const m=new Map();arr.forEach(x=>{const s=JSON.stringify(x);m.set(s,(m.get(s)||0)+1)});return m};
+    const ca=count(a.buys), cb=count(b.buys), buys=[];
+    new Set([...ca.keys(),...cb.keys()]).forEach(s=>{const n=Math.max(ca.get(s)||0,cb.get(s)||0);for(let i=0;i<n;i++)buys.push(JSON.parse(s))});
+    return {times,boxes:Math.max(a.boxes,b.boxes),buys};
+  }
+  function setAcc(st,msg){
+    const box=$('acct'); box.hidden=false;
+    const dot=$('accDot'), u=fb&&fb.user;
+    dot.className='dot'+({ok:' ok',sync:' wait',pending:' wait',waiting:' wait',err:' err'}[st]||'');
+    const T={
+      out:'Tu registro está guardado solo en este celular. Entrá con tu cuenta de Google para no perderlo nunca y verlo en cualquier teléfono.',
+      loading:'Preparando tu cuenta…',
+      sync:'Uniendo lo de este celular con tu cuenta…',
+      waiting:'Sin señal: apenas haya conexión se une lo de este celular con tu cuenta. Mientras, todo se guarda acá.',
+      ok:'Todo guardado en tu cuenta.',
+      pending:'Guardado en el celular. Se sube solo cuando haya señal.',
+      offline:'Sin conexión: la cuenta se activa cuando vuelva la señal. Podés seguir sumando igual.',
+      err:msg||'Algo falló con la cuenta.'
+    };
+    $('accText').textContent=T[st]||'';
+    $('accIn').hidden=!!u||st==='loading'||st==='offline';
+    $('accOut').hidden=!u;
+    $('accMail').textContent=u?(u.email||u.displayName||''):'';
+  }
+  async function fbLoad(){
+    if(fb||fbLoading) return; fbLoading=true; setAcc('loading');
+    try{
+      const base='https://www.gstatic.com/firebasejs/'+FB_V+'/';
+      const [App,A,F]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
+      const app=App.initializeApp(FB_CFG);
+      let db;
+      try{ db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})}) }
+      catch(e){ db=F.getFirestore(app) }
+      const auth=A.getAuth(app);
+      fb={A,F,auth,db,user:null,ready:false,unsub:[]};
+      A.getRedirectResult(auth).catch(e=>loginError(e));
+      A.onAuthStateChanged(auth,u=>{
+        fb.unsub.forEach(f=>f()); fb.unsub=[]; fb.ready=false; fb.user=u;
+        if(u) fbStart(); else setAcc('out');
+      });
+    }catch(e){ fb=null; setAcc('offline') }
+    fbLoading=false;
+  }
+  async function fbStart(){
+    const F=fb.F, uid=fb.user.uid, flag=LS+'-merged-'+uid;
+    const days=F.collection(fb.db,'users',uid,'days'), sref=F.doc(fb.db,'users',uid,'meta','settings');
+    let merged=false; try{merged=localStorage.getItem(flag)==='1'}catch(e){}
+    if(!merged){
+      setAcc('sync');
+      let snap,ss;
+      try{ [snap,ss]=await Promise.all([F.getDocsFromServer(days),F.getDocFromServer(sref)]) }
+      catch(e){ setAcc('waiting'); return }
+      if(!fb.user||fb.user.uid!==uid) return;
+      const remote={}; snap.forEach(d=>remote[d.id]=d.data());
+      const writes=[];
+      new Set([...Object.keys(state),...Object.keys(remote)]).forEach(k=>{
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+        const m=mergeDay(state[k],remote[k]);
+        if(emptyDay(m)) return;
+        state[k]=m;
+        if(JSON.stringify(m)!==JSON.stringify(asDay(remote[k]))) writes.push([k,m]);
+      });
+      for(let i=0;i<writes.length;i+=400){
+        const b=F.writeBatch(fb.db);
+        writes.slice(i,i+400).forEach(([k,m])=>b.set(F.doc(days,k),m));
+        b.commit().catch(e=>console.warn('cenicero merge',e));
+      }
+      if(ss.exists()){const s=ss.data(); if(s.perPack)perPack=s.perPack; if(s.lastPrice)lastPrice=s.lastPrice}
+      else F.setDoc(sref,{perPack,lastPrice}).catch(()=>{});
+      try{localStorage.setItem(flag,'1')}catch(e){}
+      saveLocal(); render();
+    }
+    fb.ready=true;
+    fb.unsub.push(F.onSnapshot(days,{includeMetadataChanges:true},snap=>{
+      const s={}; snap.forEach(d=>{ s[d.id]=asDay(d.data()) });
+      state=s; saveLocal(); render();
+      setAcc(snap.metadata.hasPendingWrites||snap.metadata.fromCache?'pending':'ok');
+    },e=>setAcc('err','No se pudo leer tu cuenta ('+(e.code||e.message)+'). Lo de este celular sigue guardado.')));
+    fb.unsub.push(F.onSnapshot(sref,d=>{ if(d.exists()){const s=d.data(); if(s.perPack)perPack=s.perPack; if(s.lastPrice)lastPrice=s.lastPrice; saveLocal(); render()} },()=>{}));
+  }
+  const IN_APP=/Instagram|FBAN|FBAV|WhatsApp|Line\/|TikTok|; wv\)/i.test(navigator.userAgent);
+  function loginError(e){
+    const c=e&&e.code||'';
+    if(!c||c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request') return;
+    const M={
+      'auth/unauthorized-domain':'Falta autorizar cessarrb.github.io en Firebase (Authentication → Settings → Dominios autorizados).',
+      'auth/network-request-failed':'No hay conexión. Probá entrar de nuevo cuando tengas señal.',
+      'auth/operation-not-allowed':'El inicio con Google no está activado en Firebase.',
+      'auth/web-storage-unsupported':'Este navegador no deja iniciar sesión. Abrí la app en Chrome.'
+    };
+    setAcc('err',M[c]||('No se pudo entrar ('+c+'). Si abriste la app desde WhatsApp o Instagram, abrila en Chrome.'));
+  }
+  $('accIn').addEventListener('click',async()=>{
+    if(!fb) return;
+    if(IN_APP){ setAcc('err','Google no deja iniciar sesión desde el navegador de WhatsApp o Instagram. Tocá los tres puntos → "Abrir en Chrome" y entrá desde ahí.'); return }
+    const p=new fb.A.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
+    try{ await fb.A.signInWithPopup(fb.auth,p) }
+    catch(e){ if(e.code==='auth/popup-blocked'){ try{ await fb.A.signInWithRedirect(fb.auth,p) }catch(e2){loginError(e2)} } else loginError(e) }
+  });
+  $('accOut').addEventListener('click',async()=>{
+    if(!fb||!fb.user) return;
+    try{localStorage.removeItem(LS+'-merged-'+fb.user.uid)}catch(e){}
+    try{ await fb.A.signOut(fb.auth); toast('Saliste de tu cuenta. Lo que ves sigue guardado en este celular.') }catch(e){}
+  });
+  window.addEventListener('online',()=>{ if(!ACC_ON) return; if(!fb) fbLoad(); else if(fb.user&&!fb.ready) fbStart() });
+  if(ACC_ON) fbLoad();
 
   render();
   maybeQuote();

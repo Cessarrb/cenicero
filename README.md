@@ -8,7 +8,9 @@ App web para llevar la cuenta de los cigarros que fumás.
 
 Al abrirla por primera vez en el día muestra una nota con una frase para arrancar el día (30 frases, una por día; se puede volver a ver con "Frase del día").
 
-Es un solo archivo (`index.html`), sin instalar nada. Los datos se guardan en el navegador del celular (localStorage).
+Es un solo archivo (`index.html`), sin instalar nada. Los datos se guardan en el celular y, si iniciás sesión con Google (botón en la pestaña Hoy), también en tu cuenta (Firebase/Firestore): se sincronizan solos, funcionan sin señal y aparecen en cualquier celular donde entres. Cada cuenta solo puede ver sus propios datos.
+
+`prueba/` es una copia para probar cambios antes de pasarlos a la versión principal.
 
 ## Usarla
 
